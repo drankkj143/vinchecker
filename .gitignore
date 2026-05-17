@@ -1,0 +1,16 @@
+# --- Frontend (React / Vite) ---
+node_modules/
+dist/
+.env.local
+.env.*.local
+
+# --- Backend (Python / FastAPI) ---
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+backend/.env
+
+# --- Системные файлы ---
+.DS_Store
+Thumbs.db
