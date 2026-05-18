@@ -1,6 +1,6 @@
->  **Проект находится в активной разработке. Функциональность может меняться без предупреждения. Продакшн-использование не рекомендуется.**
+> **Проект находится в активной разработке. Функциональность может меняться без предупреждения. Продакшн-использование не рекомендуется.**
 >
->  **This project is under active development. Functionality may change without notice. Production use is not recommended.**
+> **This project is under active development. Functionality may change without notice. Production use is not recommended.**
 
 ---
 
@@ -12,31 +12,65 @@
 
 ## Описание
 
-VinChecker — инструмент для автоматического сбора информации об автомобиле по VIN-номеру. Пользователь вводит VIN, после чего бот обходит открытые источники в интернете и агрегирует все найденные данные в единый отчёт.
-
-Цель проекта — предоставить максимально полную картину об истории и характеристиках автомобиля без необходимости вручную проверять множество ресурсов.
-
-## Как это работает
-
-1. Пользователь вводит VIN автомобиля.
-2. Бот автоматически обходит доступные источники и собирает данные.
-3. Все найденные сведения возвращаются пользователю в структурированном виде.
+VinChecker — инструмент для автоматического сбора информации об автомобиле по VIN-номеру. Пользователь вводит VIN, после чего бот обходит открытые источники и возвращает все найденные данные в виде JSON.
 
 ## Стек
 
-- **Backend:** Python
-- **Frontend:** React + TypeScript
+- **Backend:** Python, FastAPI
+- **Frontend:** React, TypeScript
 
-## Статус
+## Источники
 
-Проект находится в стадии разработки. Список поддерживаемых источников и типов данных будет сформирован по мере реализации.
+| Источник | Статус      | Данные                               |
+| -------- | ----------- | ------------------------------------ |
+| ka.by    | ✅ Работает | Марка, страна ввоза, дата растаможки |
 
-## Планы
+## Формат ответа
 
-- [ ] Парсинг открытых источников по VIN
-- [ ] Агрегация и структурирование данных
-- [ ] API-интерфейс для внешнего использования
-- [ ] Веб-интерфейс на React
+```json
+{
+  "vin": "SADCA2BNXJA327536",
+  "sources_success": ["ka.by"],
+  "sources_failed": [],
+  "data": {
+    "ka.by": {
+      "brand": "JAGUAR",
+      "country": "Беларусь",
+      "customs_date": "2022/11/17",
+      "source_url": "https://ka.by/vin/SADCA2BNXJA327536"
+    }
+  }
+}
+```
+
+## Запуск локально
+
+**Бэкенд**
+
+```bash
+cd backend
+pip install -r requirements.txt
+pip install requests beautifulsoup4
+uvicorn main:app --reload
+```
+
+Сервер запустится на `http://127.0.0.1:8000`.
+
+**Фронтенд**
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Приложение запустится на `http://localhost:5173`.
+
+**Проверка**
+
+```bash
+curl http://127.0.0.1:8000/check/SADCA2BNXJA327536
+```
 
 ---
 
@@ -50,28 +84,62 @@ VinChecker — инструмент для автоматического сбо
 
 ## Description
 
-VinChecker is a tool for automatically gathering vehicle information by VIN. The user submits a VIN, and the bot crawls public online sources, aggregating all available data into a single report.
-
-The goal of the project is to provide a comprehensive overview of a vehicle's history and specifications without the need to manually check multiple resources.
-
-## How It Works
-
-1. The user enters a vehicle VIN.
-2. The bot automatically crawls available sources and collects data.
-3. All retrieved information is returned to the user in a structured format.
+VinChecker is a tool for automatically gathering vehicle information by VIN. The user submits a VIN, the bot crawls open sources, and returns all found data as JSON.
 
 ## Stack
 
-- **Backend:** Python
-- **Frontend:** React + TypeScript
+- **Backend:** Python, FastAPI
+- **Frontend:** React, TypeScript
 
-## Status
+## Sources
 
-The project is under active development. The list of supported sources and data types will be defined as implementation progresses.
+| Source | Status    | Data                                |
+| ------ | --------- | ----------------------------------- |
+| ka.by  | ✅ Active | Brand, import country, customs date |
 
-## Roadmap
+## Response Format
 
-- [ ] Crawling open sources by VIN
-- [ ] Data aggregation and structuring
-- [ ] API interface for external use
-- [ ] React-based web interface
+```json
+{
+  "vin": "SADCA2BNXJA327536",
+  "sources_success": ["ka.by"],
+  "sources_failed": [],
+  "data": {
+    "ka.by": {
+      "brand": "JAGUAR",
+      "country": "Беларусь",
+      "customs_date": "2022/11/17",
+      "source_url": "https://ka.by/vin/SADCA2BNXJA327536"
+    }
+  }
+}
+```
+
+## Running Locally
+
+**Backend**
+
+```bash
+cd backend
+pip install -r requirements.txt
+pip install requests beautifulsoup4
+uvicorn main:app --reload
+```
+
+Server runs at `http://127.0.0.1:8000`.
+
+**Frontend**
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+App runs at `http://localhost:5173`.
+
+**Test**
+
+```bash
+curl http://127.0.0.1:8000/check/SADCA2BNXJA327536
+```

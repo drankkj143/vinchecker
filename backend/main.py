@@ -1,83 +1,125 @@
-import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import re
+import requests
+from bs4 import BeautifulSoup
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+app = FastAPI(
+    title="VinChecker",
+    description="Сбор информации об автомобиле по VIN из открытых источников (РБ).",
+    version="0.1.0",
+)
 
-# Настраиваем CORS, чтобы фронтенд (например, с localhost:5173) мог общаться с бэкэндом
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене лучше указать конкретный URL фронтенда
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+REQUEST_TIMEOUT = 10
 
-@app.websocket("/ws/vin/{vin}")
-async def websocket_endpoint(websocket: WebSocket, vin: str):
-    # Принимаем подключение от фронтенда
-    await websocket.accept()
-    print(f"Бот запущен для VIN: {vin}")
+VIN_PATTERN = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$", re.IGNORECASE)
 
+
+def validate_vin(vin: str) -> str:
+    vin = vin.strip().upper()
+    if not VIN_PATTERN.match(vin):
+        raise HTTPException(
+            status_code=422,
+            detail="Некорректный VIN. Должен содержать ровно 17 символов (A-Z, 0-9, без I/O/Q).",
+        )
+    return vin
+
+
+def fetch_kaby(vin: str) -> dict | None:
     try:
-        # --- Шаг 1: Имитация начала работы ---
-        await websocket.send_json(
-            {
-                "type": "log",
-                "message": f"Инициализация парсера. Проверка VIN {vin}...",
-                "status": "pending",
-            }
-        )
-        await asyncio.sleep(2)  # Ждем 2 секунды (имитируем загрузку браузера)
+        url = f"https://ka.by/vin/{vin}"
+        resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
 
-        # --- Шаг 2: Имитация обхода первого сайта ---
-        await websocket.send_json(
-            {
-                "type": "log",
-                "message": "Подключение к базе данных ГИБДД... Успешно.",
-                "status": "success",
-            }
-        )
-        await asyncio.sleep(1.5)
+        result = {}
+        page_text = soup.get_text(separator="\n")
+        lines = [l.strip() for l in page_text.splitlines() if l.strip()]
 
-        # --- Шаг 3: Имитация обхода второго сайта ---
-        await websocket.send_json(
-            {
-                "type": "log",
-                "message": "Поиск истории регистраций и пробега...",
-                "status": "pending",
-            }
-        )
-        await asyncio.sleep(2)
-
-        # --- Шаг 4: Имитация успешного завершения сбора данных ---
-        await websocket.send_json(
-            {
-                "type": "log",
-                "message": "Данные успешно собраны из 3 источников!",
-                "status": "success",
-            }
-        )
-        await asyncio.sleep(1)
-
-        # --- Шаг 5: Отправка финального результата ---
-        # В будущем здесь вместо фейковых данных будет результат работы Playwright/Selenium
-        mock_car_data = {
-            "brand": "BMW",
-            "model": "X5",
-            "year": 2021,
-            "mileage": "65 000 км",
+        known_labels = {
+            "VIN": "vin",
+            "Марка": "brand",
+            "Страна ввоза": "country",
+            "Дата растаможки": "customs_date",
         }
 
-        await websocket.send_json({"type": "result", "payload": mock_car_data})
+        for i, line in enumerate(lines):
+            if line in known_labels and i + 1 < len(lines):
+                key = known_labels[line]
+                value = lines[i + 1]
+                value = re.sub(r"[^\w\s/.,\-]", "", value).strip()
+                if value:
+                    result[key] = value
 
-    except WebSocketDisconnect:
-        # Если пользователь закрыл вкладку или отменил поиск, сервер не упадет
-        print(f"Пользователь отключился во время парсинга VIN: {vin}")
+        if "brand" not in result:
+            title = soup.find("title")
+            if title:
+                match = re.search(r"–\s*([A-Z\s]+)\s*–\s*KA\.BY", title.text)
+                if match:
+                    result["brand"] = match.group(1).strip()
+
+        result["source_url"] = url
+        return result if len(result) > 1 else None
+
+    except Exception:
+        return None
 
 
-# Простой корневой роут для проверки работоспособности через браузер
+SOURCES = [
+    ("ka.by", fetch_kaby),
+]
+
+
+def aggregate(vin: str) -> dict:
+    collected = {}
+    failed = []
+
+    for source_name, fetcher in SOURCES:
+        data = fetcher(vin)
+        if data:
+            collected[source_name] = data
+        else:
+            failed.append(source_name)
+
+    return {
+        "vin": vin,
+        "sources_success": list(collected.keys()),
+        "sources_failed": failed,
+        "data": collected,
+    }
+
+
+class VinRequest(BaseModel):
+    vin: str
+
+
 @app.get("/")
-def read_root():
-    return {"status": "FastAPI работает. WebSocket доступен по адресу /ws/vin/{vin}"}
+def root():
+    return {"status": "ok", "service": "VinChecker"}
+
+
+@app.get("/check/{vin}")
+def check_vin_get(vin: str):
+    vin = validate_vin(vin)
+    return aggregate(vin)
+
+
+@app.post("/check")
+def check_vin_post(body: VinRequest):
+    vin = validate_vin(body.vin)
+    return aggregate(vin)
